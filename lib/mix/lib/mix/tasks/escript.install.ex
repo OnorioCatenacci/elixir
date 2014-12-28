@@ -31,55 +31,67 @@ defmodule Mix.Tasks.Escript.Install do
 
   """
 
-  @behaviour Mix.Local.Installer
+  def run(args) do
+    {opts, args, _} = OptionParser.parse(args, switches: [force: :boolean])
+
+    case args do
+      [url_or_path] ->
+        if local_path?(url_or_path) or file_url?(url_or_path) do
+          install_escript(url_or_path, opts)
+        else
+          Mix.raise "Expected PATH to be a local file path or a file URL."
+        end
+
+      [] ->
+        project = Mix.Project.config
+        src = Mix.Escript.escript_name(project)
+        if File.exists?(src) do
+          install_escript(src, opts)
+        else
+          Mix.raise "Expected PATH to be given.\n#{usage}"
+        end
+
+      _ ->
+          Mix.raise "Unexpected arguments.\n#{usage}"
+    end
+  end
+
+  defp usage do
+    "Usage: mix escript.install PATH"
+  end
 
   @escript_file_mode 0o555 # only read and execute permissions
 
-  @switches [force: :boolean]
-  @spec run(OptionParser.argv) :: boolean
-  def run(argv) do
-    Mix.Local.Installer.install({__MODULE__, :escript}, argv, @switches)
-  end
-
-  ### Mix.Local.Installer callbacks
-
-  def check_path_or_url(_), do: :ok
-
-  def find_previous_versions(_src, dst) do
-    if File.exists?(dst), do: [dst], else: []
-  end
-
-  def before_install(_src, dst_path) do
-    File.rm(dst_path)
-    File.rm(dst_path <> ".bat")
-    :ok
-  end
-
-  def after_install(dst, _previous) do
-    File.chmod!(dst, @escript_file_mode)
-    write_bat!(dst <> ".bat", :os.type)
-    check_discoverability(dst)
-  end
-
-  ### Private helpers
-
-  defp write_bat!(path, {:win32, _}) do
-    File.write!(path, """
-    @echo off
-    @escript "%~dpn0" %*
-    """)
-    File.chmod!(path, @escript_file_mode)
-  end
-  defp write_bat!(_path, _type) do
-    :ok
-  end
-
-  defp check_discoverability(path) do
-    executable = Path.basename(path)
-    sys_path = System.find_executable(executable)
-    if sys_path != path do
-      Mix.shell.info "\nConsider adding #{Mix.Local.path_for(:escript)} to your PATH\n"
-                  <> "to be able to invoke escripts by name."
+  defp install_escript(src, opts) do
+    dst = Path.join([Mix.Local.escripts_path, basename(src)])
+    if opts[:force] || should_install?(src, File.exists?(dst)) do
+      File.rm!(dst)
+      if Mix.Utils.copy_path!(src, dst, opts) do
+        Mix.shell.info [:green, "* creating ", :reset, Path.relative_to_cwd(dst)]
+        File.chmod!(dst, @escript_file_mode)
+      end
     end
+  end
+
+  defp local_path?(url_or_path) do
+    File.regular?(url_or_path)
+  end
+
+  defp file_url?(url_or_path) do
+    URI.parse(url_or_path).scheme in ["http", "https"]
+  end
+
+  defp should_install?(src, false) do
+    Mix.shell.yes?("Are you sure you want to install escript #{src}?")
+  end
+
+  defp should_install?(src, true) do
+    Mix.shell.yes?("Found existing escript: #{basename(src)}.\n" <>
+                   "Are you sure you want to replace it?")
+  end
+
+  defp basename(path) do
+    %URI{path: path} = URI.parse(path)
+    Path.basename(path)
   end
 end

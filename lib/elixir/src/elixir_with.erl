@@ -18,39 +18,31 @@ expand(Meta, Args, E) ->
         {Args, []}
     end,
 
-  {DoExpr, DoOpts} =
+  {DoExpr, BlockWithoutDo} =
     case lists:keytake(do, 1, Block) of
-      {value, {do, Do}, DoRest} ->
-        {Do, DoRest};
+      {value, {do, Do}, ElseRest} ->
+        {Do, ElseRest};
       false ->
         elixir_errors:compile_error(Meta, ?m(E, file),
           "missing do keyword in with")
     end,
-
-  {ElseExpr, ElseOpts} =
-    case lists:keytake(else, 1, DoOpts) of
-      {value, {else, Else}, ElseRest} ->
-        {Else, ElseRest};
+  {ElseExpr, Opts} =
+    case lists:keytake(else, 1, BlockWithoutDo) of
+      {value, {else, Else}, Rest} ->
+        {Else, Rest};
       false ->
-        {nil, DoOpts}
+        {nil, BlockWithoutDo}
     end,
 
-  case ElseOpts of
-    [{Key, _}|_] ->
-      elixir_errors:compile_error(Meta, ?m(E, file),
-        "unexpected keyword ~ts in with", [Key]);
-    [] ->
-      ok
-  end,
-
-  {ECases, EC} = lists:mapfoldl(fun expand/2, E, Cases),
-  {EDoExpr, _} = elixir_exp:expand(DoExpr, EC),
-  {EElseExpr, _} = expand_else(ElseExpr, E),
-  {{with, Meta, ECases ++ [[{do, EDoExpr} | EElseExpr]]}, E}.
+  {EOpts, EO} = elixir_exp:expand(Opts, E),
+  {ECases, EC} = lists:mapfoldl(fun expand/2, EO, Cases),
+  {EExpr, _} = elixir_exp:expand(DoExpr, EC),
+  {EEExpr, _} = expand_else(ElseExpr, E),
+  {{with, Meta, ECases ++ [[{do, EExpr} | EEExpr] ++ EOpts]}, E}.
 
 expand({'<-', Meta, [Left, Right]}, E) ->
   {ERight, ER} = elixir_exp:expand(Right, E),
-  {[ELeft], EL}  = elixir_exp_clauses:head([Left], E),
+  {ELeft, EL}  = elixir_exp_clauses:match(fun elixir_exp:expand/2, Left, E),
   {{'<-', Meta, [ELeft, ERight]}, elixir_env:mergev(EL, ER)};
 expand(X, E) ->
   elixir_exp:expand(X, E).
@@ -67,38 +59,54 @@ translate(Meta, Args, S) ->
   {Parts, [{do, Expr} | ExprList]} = elixir_utils:split_last(Args),
   CaseExpr =
     case ExprList of
-      [{else, ElseExpr}] ->
-        build_else(Meta, build_cases(Parts, {ok, Expr}, fun(X) -> {error, X} end), ElseExpr);
-      [] ->
-        build_cases(Parts, Expr, fun(X) -> X end)
+      [{else, ElseExpr} | _Opts] ->
+        RefVar = {ref, Meta, elixir_with},
+        MakeRefExpr = make_ref(RefVar, Meta),
+        Cases = build_cases(Parts, {RefVar, Expr}),
+        Else = build_else(Meta, Cases, RefVar, ElseExpr),
+        {'__block__', Meta, [MakeRefExpr, Else]};
+      _Opts ->
+        build_cases(Parts, Expr)
     end,
   {TC, TS} = elixir_translator:translate(CaseExpr, S),
   {TC, elixir_scope:mergec(S, TS)}.
 
-build_cases([{'<-', Meta, [Left, Right]} | Rest], DoExpr, Wrapper) ->
+build_cases([{'<-', Meta, [Left, Right]} | Rest], DoExpr) ->
   Other = {'other', Meta, ?MODULE},
   Clauses = [
-    {'->', Meta, [[Left], build_cases(Rest, DoExpr, Wrapper)]},
-    {'->', Meta, [[Other], Wrapper(Other)]}
+    {'->', Meta, [[Left], build_cases(Rest, DoExpr)]},
+    {'->', Meta, [[Other], Other]}
   ],
   {'case', Meta, [Right, [{do, Clauses}]]};
-build_cases([Expr | Rest], DoExpr, Wrapper) ->
-  {'__block__', [], [Expr, build_cases(Rest, DoExpr, Wrapper)]};
-build_cases([], DoExpr, _Wrapper) ->
-  DoExpr.
+build_cases([], DoExpr) ->
+  DoExpr;
+build_cases([{_, Meta, _} = Expr | Rest], DoExpr) ->
+  {'__block__', Meta, [Expr, build_cases(Rest, DoExpr)]}.
 
-build_else(Meta, WithCases, ElseClauses) ->
-  Result = {'result', Meta, ?MODULE},
+build_else(Meta, WithCases, RefVar, ElseClauses) ->
+  Result = {'result', Meta, nil},
+  MatchAllExist = has_match_all_clause(ElseClauses),
   Clauses = [
-    {'->', Meta, [[{ok, Result}], Result]}
-    | else_to_error_clause(ElseClauses)
-  ] ++ [build_raise(Meta)],
+    {'->', Meta, [[{{'^', Meta, [RefVar]}, Result}], Result]}
+    | ElseClauses
+  ] ++ [build_raise(Meta) || not MatchAllExist],
   {'case', Meta, [WithCases, [{do, Clauses}]]}.
 
-else_to_error_clause(Clauses) ->
-  [{'->', Meta, [[{error, Match}], Expr]} ||
-    {'->', Meta, [[Match], Expr]} <- Clauses].
+has_match_all_clause([{'->', _, [[Match], _]} | ElseClauses]) ->
+  has_match_all_clause(Match) orelse has_match_all_clause(ElseClauses);
+has_match_all_clause([{'->', _, _} | ElseClauses]) ->
+  has_match_all_clause(ElseClauses);
+has_match_all_clause({'=', _, Expressions}) ->
+  lists:all(fun has_match_all_clause/1, Expressions);
+has_match_all_clause({VarName, _, Context}) when is_atom(VarName) andalso is_atom(Context) ->
+  true;
+has_match_all_clause(_) ->
+  false.
+
+make_ref(RefVar, Meta) ->
+  RefCall = {{'.', Meta, [erlang, make_ref]}, [], []},
+  {'=', Meta, [RefVar, RefCall]}.
 
 build_raise(Meta) ->
-  Other = {'raise', Meta, ?MODULE},
-  {'->', ?generated, [[{error, Other}], {{'.', Meta, [erlang, error]}, Meta, [{with_clause, Other}]}]}.
+  Other = {'other', Meta, nil},
+  {'->', Meta, [[Other], {{'.', Meta, [erlang, error]}, Meta, [{with_clause, Other}]}]}.

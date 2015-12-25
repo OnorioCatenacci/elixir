@@ -13,12 +13,6 @@ defmodule Kernel.WithTest do
     assert with({:ok, _} = res <- ok(42), do: elem(res, 1)) == 42
   end
 
-  test "with guards" do
-    assert with(x when x < 2 <- four(), do: :ok) == 4
-    assert with(x when x > 2 <- four(), do: :ok) == :ok
-    assert with(x when x < 2 when x == 4 <- four(), do: :ok) == :ok
-  end
-
   test "pin matching with" do
     key = :ok
     assert with({^key, res} <- ok(42), do: res) == 42
@@ -46,6 +40,10 @@ defmodule Kernel.WithTest do
     assert result == :error
   end
 
+  test "else conditions" do
+    assert with({:ok, res} <- 41, do: res, else: ({:error, error} -> error; res -> res + 1)) == 42
+  end
+
   test "errors in with" do
     assert_raise RuntimeError, fn ->
       with({:ok, res} <- oops(), do: res)
@@ -56,19 +54,10 @@ defmodule Kernel.WithTest do
     end
   end
 
-  test "else conditions" do
-    assert with({:ok, res} <- 41, do: res, else: ({:error, error} -> error; res -> res + 1)) == 42
-    assert with({:ok, res} <- 41, do: res, else: (_ -> :error)) == :error
-  end
-
-  test "else conditions with match error" do
-    assert_raise WithClauseError, "no with clause matching: :error",  fn ->
-      with({:ok, res} <- error(), do: res, else: ({:error, error} -> error))
+  test "with clause error" do
+    assert_raise WithClauseError, "no with clause matching: 41",  fn ->
+      with({:ok, res} <- 41, do: res, else: ({:error, error} -> error))
     end
-  end
-
-  defp four() do
-    4
   end
 
   defp error() do

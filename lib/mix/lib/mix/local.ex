@@ -1,7 +1,7 @@
 defmodule Mix.Local do
   @moduledoc false
 
-  @public_keys_html "http://s3.hex.pm.global.prod.fastly.net/installs/public_keys.html"
+  @public_keys_html "https://s3.amazonaws.com/s3.hex.pm/installs/public_keys.html"
 
   @type item :: :archive | :escript
 
@@ -43,19 +43,10 @@ defmodule Mix.Local do
   end
 
   @doc """
-  The path for local escripts.
-
-  Check `mix escript` for info.
-  """
-  def escripts_path do
-    Path.join(Mix.Utils.mix_home, "escripts")
-  end
-
-  @doc """
   Appends archives paths into Erlang code path.
   """
   def append_archives do
-    archives = archives_ebins()
+    archives = archives_ebin()
     Enum.each(archives, &check_elixir_version_in_ebin/1)
     Enum.each(archives, &Code.append_path/1)
   end
@@ -70,35 +61,36 @@ defmodule Mix.Local do
   @doc """
   Returns all tasks in local archives.
   """
-  def archives_tasks do
-    Mix.Task.load_tasks(archives_ebins())
+  def all_tasks do
+    Mix.Task.load_tasks(archives_ebin())
   end
 
   @doc """
-  Returns the name of an archive given a path.
+  Returns paths of all archive files matching given
+  application name.
   """
-  def archive_name(path) do
-    path              # "foo/bar/baz-0.1.0.ez"
-    |> Path.basename  # "baz-0.1.0.ez"
-    |> Path.rootname  # "baz-0.1.0"
+  def archive_files(name) do
+    archives(name, ".ez") ++ archives(name, "-*.ez")
   end
 
   @doc """
-  Returns the ebin path of an archive.
+  Checks Elixir version requirement stored in the archive and print a warning if it is not satisfied.
   """
-  def archive_ebin(path) do
-    Path.join [path, archive_name(path), "ebin"]
+  def check_archive_elixir_version(path) do
+    path |> Mix.Archive.ebin |> check_elixir_version_in_ebin()
   end
 
-  defp archives_ebins do
-    Path.join(path_for(:archive), "*.ez") |> Path.wildcard |> Enum.map(&archive_ebin/1)
+  defp archives(name, suffix) do
+    path_for(:archive)
+    |> Path.join(name <> suffix)
+    |> Path.wildcard
   end
 
-  @doc """
-  Checks Elixir version requirement stored in the ebin directory
-  and print a warning if it is not satisfied.
-  """
-  def check_elixir_version_in_ebin(ebin) do
+  defp archives_ebin do
+    Path.join(path_for(:archive), "*.ez") |> Path.wildcard |> Enum.map(&Mix.Archive.ebin/1)
+  end
+
+  defp check_elixir_version_in_ebin(ebin) do
     elixir = ebin |> Path.dirname |> Path.join(".elixir") |> String.to_char_list
     case :erl_prim_loader.get_file(elixir) do
       {:ok, req, _} ->
@@ -114,7 +106,7 @@ defmodule Mix.Local do
   end
 
   @doc """
-  Fetches the given signed CSV files, verifies and returns the matching
+  Fetches the given signed CSV files, verify and return the matching
   Elixir version, artifact version and artifact's checksum.
 
   Used to install both Rebar and Hex from S3.

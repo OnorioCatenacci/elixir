@@ -43,9 +43,8 @@ defmodule Task do
        meant to receive the result no longer exists, there is
        no purpose in completing the computation.
 
-       If this is not desired, use `Task.start/1` or consider starting 
-       the task under a `Task.Supervisor` using `async_nolink` or 
-       `start_child`.
+       If this is not desired, consider starting the task under
+       a `Task.Supervisor` using `async_nolink` or `start_child`.
 
   `Task.yield/2` is an alternative to `await/2` where the caller will
   temporarily block, waiting until the task replies or crashes. If the
@@ -268,9 +267,8 @@ defmodule Task do
 
   ## Message format
 
-  The reply sent by the task will be in the format `{ref, result}`,
-  where `ref` is the monitor reference held by the task struct
-  and `result` is the return value of the task function.
+  The reply sent by the task will be in the format `{ref, msg}`,
+  where `ref` is the monitor reference held by the task struct.
   """
   @spec async(module, atom, [term]) :: t
   def async(mod, fun, args) do
@@ -309,12 +307,6 @@ defmodule Task do
   This function can only be called once for any given task. If you want
   to be able to check multiple times if a long-running task has finished
   its computation, use `yield/2` instead.
-
-  ## Compatibility with OTP behaviours
-
-  It is not recommended to `await` a long-running task inside an OTP
-  behaviour such as `GenServer`. Instead, you should match on the message
-  coming from a task inside your `handle_info` callback.
   """
   @spec await(t, timeout) :: term | no_return
   def await(task, timeout \\ 5000)
@@ -366,23 +358,19 @@ defmodule Task do
   end
 
   @doc """
-  Temporarily blocks the current process waiting for a task reply.
+  Yields for a task reply in the given time interval.
 
-  Returns `{:ok, reply}` if the reply is received, `nil` if
-  no reply has arrived, or `{:exit, reason}` if the task has already
-  exited. Keep in mind that normally a task failure also causes
-  the process owning the task to exit. Therefore this function can
-  return `{:exit, reason}` only if
-
-    * the task process exited with the reason `:normal`
-    * it isn't linked to the caller
-    * the caller is trapping exits
+  Returns `{:ok, reply}` if the reply is received, `{:exit, reason}`
+  if the task exited or `nil` if no reply arrived.
 
   A timeout, in milliseconds, can be given with default value
   of `5000`. If the time runs out before a message from
   the task is received, this function will return `nil`
   and the monitor will remain active. Therefore `yield/2` can be
   called multiple times on the same task.
+
+  In case the task process dies, this function will exit with the
+  same reason as the task.
 
   This function assumes the task's monitor is still active or the
   monitor's `:DOWN` message is in the message queue. If it has been
@@ -416,15 +404,14 @@ defmodule Task do
 
   This function receives a list of tasks and waits for their
   replies in the given time interval. It returns a list
-  of tuples of two elements, with the task as the first element
-  and the yielded result as the second.
+  of tuples of two elements, with tasks as the first element and
+  the yielded result as the second.
 
-  Similarly to `yield/2`, each task's result will be
+  Similar to `yield/2`, each task's result will be
 
-    * `{:ok, term}` if the task has successfully reported its
-      result back in the given time interval
-    * `{:exit, reason}` if the task has died
-    * `nil` if the task keeps running past the timeout
+    * `{:ok, term}` if it succeeds in the given time interval
+    * `{:exit, reason}` if it crashes
+    * `nil` if it keeps running past the timeout
 
   Check `yield/2` for more information.
 
@@ -434,7 +421,6 @@ defmodule Task do
   and retrieve the results received in a given timeframe.
   If we combine it with `Task.shutdown/2`, it allows us to gather
   those results and cancel the tasks that have not replied in time.
-
   Let's see an example.
 
       tasks =
@@ -514,13 +500,13 @@ defmodule Task do
   Unlinks and shuts down the task, and then checks for a reply.
 
   Returns `{:ok, reply}` if the reply is received while shutting down the task,
-  `{:exit, reason}` if the task died, otherwise `nil`.
+  `{:exit, reason}` if the task exited abornormally, otherwise `nil`.
 
   The shutdown method is either a timeout or `:brutal_kill`. In case
   of a `timeout`, a `:shutdown` exit signal is sent to the task process
-  and if it does not exit within the timeout, it is killed. With `:brutal_kill`
-  the task is killed straight away. In case the task terminates abnormally
-  (possibly killed by another process), this function will exit with the same reason.
+  and if it does not exit within the timeout it is killed. With `:brutal_kill`
+  the task is killed straight away. In case the task exits abnormally, or a
+  timeout shutdown kills the task, this function will exit with the same reason.
 
   It is not required to call this function when terminating the caller, unless
   exiting with reason `:normal` or if the task is trapping exits. If the caller is

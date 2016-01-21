@@ -56,7 +56,7 @@ defmodule Protocol do
   @doc """
   Checks if the given module is loaded and is protocol.
 
-  Returns `:ok` if so, otherwise raises `ArgumentError`.
+  Returns `:ok` if so, otherwise raises ArgumentError.
   """
   @spec assert_protocol!(module) :: :ok | no_return
   def assert_protocol!(module) do
@@ -83,7 +83,7 @@ defmodule Protocol do
   Checks if the given module is loaded and is an implementation
   of the given protocol.
 
-  Returns `:ok` if so, otherwise raises `ArgumentError`.
+  Returns `:ok` if so, otherwise raises ArgumentError.
   """
   @spec assert_impl!(module, module) :: :ok | no_return
   def assert_impl!(protocol, base) do
@@ -387,11 +387,10 @@ defmodule Protocol do
   defp compile({protocol, code}, docs) do
     opts = if Code.compiler_options[:debug_info], do: [:debug_info], else: []
     {:ok, ^protocol, binary, _warnings} = :compile.forms(code, [:return|opts])
-    {:ok,
-      case docs do
-        :missing_chunk -> binary
-        _ -> :elixir_module.add_beam_chunk(binary, @docs_chunk, docs)
-      end}
+    unless docs == :missing_chunk do
+      binary = :elixir_module.add_beam_chunk(binary, @docs_chunk, docs)
+    end
+    {:ok, binary}
   end
 
   ## Definition callbacks
@@ -428,7 +427,7 @@ defmodule Protocol do
   defp after_defprotocol do
     quote bind_quoted: [builtin: builtin] do
       @doc false
-      @spec impl_for(term) :: atom | nil
+      @spec impl_for(term) :: atom() | nil
       Kernel.def impl_for(data)
 
       # Define the implementation for structs.
@@ -452,7 +451,7 @@ defmodule Protocol do
       end, builtin)
 
       @doc false
-      @spec impl_for!(term) :: atom | no_return
+      @spec impl_for!(term) :: atom() | no_return()
       Kernel.def impl_for!(data) do
         impl_for(data) || raise(Protocol.UndefinedError, protocol: __MODULE__, value: data)
       end

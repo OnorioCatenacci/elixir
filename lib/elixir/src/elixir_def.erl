@@ -297,8 +297,9 @@ default_function_for(Kind, Name, {clause, Line, Args, _Guards, _Exprs} = Clause)
 default_function_for(_, Name, {clause, Line, Args, _Guards, _Exprs} = Clause) ->
   {function, Line, Name, length(Args), [Clause]}.
 
-warn_bodyless_function(_Line, _File, 'Elixir.Module', _Kind, _Tuple) ->
-  ok; %% Documentation for __info__
+warn_bodyless_function(_Line, _File, Special, _Kind, _Tuple)
+    when Special == 'Elixir.Kernel.SpecialForms'; Special == 'Elixir.Module' ->
+  ok;
 warn_bodyless_function(Line, File, _Module, Kind, Tuple) ->
   elixir_errors:form_warn([{line, Line}], File, ?MODULE, {bodyless_clause, Kind, Tuple}),
   ok.
@@ -418,12 +419,12 @@ format_error({defs_with_defaults, Name, {Kind, Arity}, {K, A}}) when Arity < A -
 
 format_error({clauses_with_defaults, {Kind, Name, Arity}}) ->
   io_lib:format(""
-    "definitions with multiple clauses and default values require a function head. Instead of:\n"
+    "definitions with multiple clauses and default values require a function head. Instead of\n"
     "\n"
     "    def foo(:first_clause, b \\\\ :default) do ... end\n"
     "    def foo(:second_clause, b) do ... end\n"
     "\n"
-    "one should write:\n"
+    "one should write\n"
     "\n"
     "    def foo(a, b \\\\ :default)\n"
     "    def foo(:first_clause, b) do ... end\n"

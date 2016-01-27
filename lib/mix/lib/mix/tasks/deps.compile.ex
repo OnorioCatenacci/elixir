@@ -25,7 +25,7 @@ defmodule Mix.Tasks.Deps.Compile do
   """
 
   import Mix.Dep, only: [loaded: 1, available?: 1, loaded_by_name: 2,
-                         make?: 1, mix?: 1]
+                         format_dep: 1, make?: 1, mix?: 1]
 
   @spec run(OptionParser.argv) :: :ok
   def run(args) do
@@ -98,11 +98,6 @@ defmodule Mix.Tasks.Deps.Compile do
       if req = old_elixir_req(Mix.Project.config) do
         Mix.shell.error "warning: the dependency #{inspect dep.app} requires Elixir #{inspect req} " <>
                         "but you are running on v#{System.version}"
-      end
-
-      # Force recompilation on compile status
-      if dep.status == :compile do
-        Mix.Dep.Lock.touch_manifest
       end
 
       try do

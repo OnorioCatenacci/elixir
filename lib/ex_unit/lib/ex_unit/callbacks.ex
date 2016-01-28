@@ -63,7 +63,7 @@ defmodule ExUnit.Callbacks do
             IO.puts "This is invoked once the test is done"
           end
 
-          # Returns extra metadata to be merged into context
+          # Returns extra metadata, it must be a dict
           {:ok, hello: "world"}
         end
 
@@ -146,7 +146,7 @@ defmodule ExUnit.Callbacks do
 
   ## Helpers
 
-  @reserved ~w(case test line file registered)a
+  @reserved ~w(case test line file capture_log skip timeout report async)a
 
   @doc false
   def __merge__(_mod, context, :ok) do
@@ -167,10 +167,9 @@ defmodule ExUnit.Callbacks do
 
   defp context_merge(mod, context, %{} = data) do
     Map.merge(context, data, fn
-      k, v1, v2 when k in @reserved ->
-        if v1 == v2, do: v1, else: raise_merge_reserved!(mod, k, v1)
-      _, _, v ->
-        v
+      _, v, v -> v
+      k, _, v when k in @reserved -> raise_merge_reserved!(mod, k, v)
+      _, _, v -> v
     end)
   end
 
@@ -188,7 +187,7 @@ defmodule ExUnit.Callbacks do
   end
 
   defp raise_merge_reserved!(mod, key, value) do
-    raise "ExUnit callback in #{inspect mod} is trying to set " <>
+    raise "expected ExUnit callback in #{inspect mod} is trying to set " <>
           "reserved field #{inspect key} to #{inspect value}"
   end
 

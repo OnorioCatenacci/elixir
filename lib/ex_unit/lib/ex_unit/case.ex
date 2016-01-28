@@ -40,7 +40,7 @@ defmodule ExUnit.Case do
           {:ok, [pid: pid]}
         end
 
-        test "stores key-value pairs", context do
+        test "stores key-values", context do
           assert KV.put(context[:pid], :hello, :world) == :ok
           assert KV.get(context[:pid], :hello) == :world
         end
@@ -49,7 +49,7 @@ defmodule ExUnit.Case do
   As the context is a map, it can be pattern matched on to extract
   information:
 
-      test "stores key-value pairs", %{pid: pid} do
+      test "stores key-values", %{pid: pid} do
         assert KV.put(pid, :hello, :world) == :ok
         assert KV.get(pid, :hello) == :world
       end
@@ -114,12 +114,11 @@ defmodule ExUnit.Case do
   The following tags are set automatically by ExUnit and are
   therefore reserved:
 
-    * `:case`       - the test case module
-    * `:test`       - the test name
-    * `:line`       - the line on which the test was defined
-    * `:file`       - the file on which the test was defined
-    * `:async`      - if the test case is in async mode
-    * `:registered` - used for `ExUnit.Case.register_attribute/3` values
+    * `:case`  - the test case module
+    * `:test`  - the test name
+    * `:line`  - the line on which the test was defined
+    * `:file`  - the file on which the test was defined
+    * `:async` - if the test case is in async mode
 
   The following tags customize how tests behaves:
 
@@ -131,7 +130,7 @@ defmodule ExUnit.Case do
   ### Reporting tags
 
   ExUnit also allows tags to be included in error reports, making
-  it easy for developers to see under which circumstances a test
+  it easy for developers to see under which circunstances a test
   was evaluated. To do so, you use the `:report` tag:
 
       @moduletag report: [:user_id]
@@ -169,12 +168,12 @@ defmodule ExUnit.Case do
   messages generated while running a test are captured and only if the test fails are they printed
   to aid with debugging.
 
-  You can opt into this behaviour for individual tests by tagging them with `:capture_log` or enable
+  You can opt into this behavior for individual tests by tagging them with `:capture_log` or enable
   log capture for all tests in the ExUnit configuration:
 
       config :ex_unit, capture_log: true
 
-  This default can be overridden by `@tag capture_log: false` or `@moduletag capture_log: false`.
+  This default can be overriden by `@tag capture_log: false` or `@moduletag capture_log: false`.
 
   Since `setup_all` blocks don't belong to a specific test, log messages generated in them (or
   between tests) are never captured. If you want to suppress these messages as well, remove the
@@ -183,7 +182,7 @@ defmodule ExUnit.Case do
       config :logger, backends: []
   """
 
-  @reserved [:case, :test, :file, :line, :registered]
+  @reserved [:case, :test, :file, :line]
 
   @doc false
   defmacro __using__(opts) do
@@ -198,7 +197,7 @@ defmodule ExUnit.Case do
       async = !!unquote(async)
 
       unless Module.get_attribute(__MODULE__, :ex_unit_tests) do
-        Enum.each [:ex_unit_tests, :tag, :moduletag, :ex_unit_registered],
+        Enum.each [:ex_unit_tests, :tag, :moduletag],
           &Module.register_attribute(__MODULE__, &1, accumulate: true)
 
         @moduletag async: async
@@ -210,7 +209,7 @@ defmodule ExUnit.Case do
 
       import ExUnit.Callbacks
       import ExUnit.Assertions
-      import ExUnit.Case, only: [test: 1, test: 2, test: 3]
+      import ExUnit.Case
       import ExUnit.DocTest
     end
   end
@@ -303,14 +302,11 @@ defmodule ExUnit.Case do
             "\"use ExUnit.Case\" in the current module"
     end
 
-    registered_attributes = Module.get_attribute(mod, :ex_unit_registered)
-    registered = Map.new(registered_attributes, &{&1, Module.get_attribute(mod, &1)})
-
     tags =
       (tags ++ Module.get_attribute(mod, :tag) ++ moduletag)
       |> normalize_tags
       |> validate_tags
-      |> Map.merge(%{line: line, file: file, registered: registered})
+      |> Map.merge(%{line: line, file: file})
 
     test = %ExUnit.Test{name: name, case: mod, tags: tags}
     test_names = Module.get_attribute(mod, :ex_unit_test_names)
@@ -320,36 +316,7 @@ defmodule ExUnit.Case do
       Module.put_attribute(mod, :ex_unit_test_names, Map.put(test_names, name, true))
     end
 
-    Enum.each [:tag | registered_attributes], fn(attribute) ->
-      Module.delete_attribute(mod, attribute)
-    end
-  end
-
-  @doc """
-  Registers a new attribute to be used during `ExUnit.Case` tests.
-
-  The attribute values will be available as a key/value pair in
-  `context.registered`. The key/value pairs will be cleanred
-  after each `ExUnit.Case.test` similar to `@tag`.
-
-  `Module.register_attribute/3` is used to register the attribute,
-  this function takes the same options.
-
-  ## Examples
-
-      defmodule MyTest do
-        use ExUnit.Case
-        ExUnit.Case.register_attribute __MODULE__, :foobar
-
-        @foobar hello: "world"
-        test "using custom test attribute", context do
-          assert context.registered.hello == "world"
-        end
-      end
-  """
-  def register_attribute(mod, name, opts \\ []) when is_atom(name) do
-    Module.register_attribute(mod, name, opts)
-    Module.put_attribute(mod, :ex_unit_registered, name)
+    Module.delete_attribute(mod, :tag)
   end
 
   defp validate_tags(tags) do

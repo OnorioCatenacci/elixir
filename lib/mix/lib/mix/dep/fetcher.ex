@@ -7,7 +7,7 @@
 defmodule Mix.Dep.Fetcher do
   @moduledoc false
 
-  import Mix.Dep, only: [format_dep: 1, check_lock: 1, available?: 1]
+  import Mix.Dep, only: [format_dep: 1, check_lock: 1, available?: 1, ok?: 1]
 
   @doc """
   Fetches all dependencies.
@@ -95,12 +95,9 @@ defmodule Mix.Dep.Fetcher do
     # If there is any other dependency that is not ok, we include
     # it for compilation too, this is our best to try to solve the
     # maximum we can at each deps.get and deps.update.
-    deps =
-      if Enum.all?(all_deps, &available?/1) do
-        Enum.uniq_by(with_depending(deps, all_deps), &(&1.app))
-      else
-        deps
-      end
+    if Enum.all?(all_deps, &available?/1) do
+      deps = Enum.uniq_by(with_depending(deps, all_deps), &(&1.app))
+    end
 
     # Merge the new lock on top of the old to guarantee we don't
     # leave out things that could not be fetched and save it.

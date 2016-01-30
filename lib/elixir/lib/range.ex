@@ -21,12 +21,14 @@ defmodule Range do
       iex> last
       3
 
-  A Range implements the Enumerable protocol, which means
-  all of the functions in the Enum module is available:
+  A Range includes members from Enum such as reduce, count and member?
 
       iex> range = 1..10
       1..10
-      iex> Enum.reduce(range, 0, fn i, acc -> i * i + acc end)
+      # add_squares is an example function which squares the first parameter and
+      # adds to the accumulator provided as the second parameter
+      iex> add_squares = &(&2 + &1* &1)
+      iex> Enum.reduce(range, 0, add_squares)
       385
       iex> Enum.count(range)
       10
@@ -78,7 +80,7 @@ defmodule Range do
 end
 
 defimpl Enumerable, for: Range do
-  def reduce(first..last, acc, fun) do
+  def reduce(first .. last, acc, fun) do
     reduce(first, last, acc, fun, last >= first)
   end
 
@@ -102,7 +104,7 @@ defimpl Enumerable, for: Range do
     {:done, acc}
   end
 
-  def member?(first..last, value) when is_integer(value) do
+  def member?(first .. last, value) when is_integer(value) do
     if first <= last do
       {:ok, first <= value and value <= last}
     else
@@ -110,11 +112,11 @@ defimpl Enumerable, for: Range do
     end
   end
 
-  def member?(_.._, _value) do
+  def member?(_ .. _, _value) do
     {:ok, false}
   end
 
-  def count(first..last) do
+  def count(first .. last) do
     if first <= last do
       {:ok, last - first + 1}
     else
@@ -126,7 +128,7 @@ end
 defimpl Inspect, for: Range do
   import Inspect.Algebra
 
-  def inspect(first..last, opts) do
+  def inspect(first .. last, opts) do
     concat [to_doc(first, opts), "..", to_doc(last, opts)]
   end
 end

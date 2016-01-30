@@ -62,7 +62,7 @@ defmodule Mix.CLI do
       exception ->
         stacktrace = System.stacktrace
 
-        if Map.get(exception, :mix) && not Mix.debug? do
+        if Map.get(exception, :mix) do
           mod = exception.__struct__ |> Module.split() |> Enum.at(0, "Mix")
           Mix.shell.error "** (#{mod}) #{Exception.message(exception)}"
           exit({:shutdown, 1})
@@ -88,7 +88,8 @@ defmodule Mix.CLI do
   end
 
   defp change_env(task) do
-    if env = preferred_cli_env(task) do
+    if is_nil(System.get_env("MIX_ENV")) &&
+       (env = preferred_cli_env(task)) do
       Mix.env(env)
       if project = Mix.Project.pop do
         %{name: name, file: file} = project
@@ -98,12 +99,8 @@ defmodule Mix.CLI do
   end
 
   defp preferred_cli_env(task) do
-    if System.get_env("MIX_ENV") do
-      nil
-    else
-      task = String.to_atom(task)
-      Mix.Project.config[:preferred_cli_env][task] || Mix.Task.preferred_cli_env(task)
-    end
+    task = String.to_atom(task)
+    Mix.Project.config[:preferred_cli_env][task] || Mix.Task.preferred_cli_env(task)
   end
 
   defp load_dot_config do
@@ -114,13 +111,12 @@ defmodule Mix.CLI do
   end
 
   defp display_version() do
-    IO.puts :erlang.system_info(:system_version)
-    IO.puts "Mix " <> System.build_info[:build]
+    IO.puts "Mix #{System.version}"
   end
 
   # Check for --help or --version in the args
   defp check_for_shortcuts([first_arg|_]) when first_arg in
-      ["--help", "-h"], do: :help
+      ["--help", "-h", "-help"], do: :help
 
   defp check_for_shortcuts([first_arg|_]) when first_arg in
       ["--version", "-v"], do: :version

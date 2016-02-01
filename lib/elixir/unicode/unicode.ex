@@ -10,27 +10,13 @@ end
 
 defmodule String.Unicode do
   @moduledoc false
-  def version, do: {8, 0, 0}
-
-  # WhiteSpace.txt is extracted from Unicode's PropList.txt (just the White_Space property)
-  prop_path = Path.join(__DIR__, "WhiteSpace.txt")
-
-  whitespace = Enum.reduce File.stream!(prop_path), [], fn(line, acc) ->
-    case line |> :binary.split(";") |> hd do
-      <<first::4-bytes, "..", last::4-bytes, _::binary>> ->
-        first = String.to_integer(first, 16)
-        last = String.to_integer(last, 16)
-        Enum.map(first..last, &to_binary.(Integer.to_string(&1, 16))) ++ acc
-      <<single::4-bytes, _::binary>> ->
-        [to_binary.(single) | acc]
-    end
-  end
+  def version, do: {7, 0, 0}
 
   data_path = Path.join(__DIR__, "UnicodeData.txt")
 
-  {codes, breakable_whitespace} = Enum.reduce File.stream!(data_path), {[], whitespace}, fn(line, {cacc, wacc}) ->
+  {codes, whitespace} = Enum.reduce File.stream!(data_path), {[], []}, fn(line, {cacc, wacc}) ->
     [codepoint, _name, _category,
-     _class, _bidi, decomposition,
+     _class, bidi, _decomposition,
      _numeric_1, _numeric_2, _numeric_3,
      _bidi_mirror, _unicode_1, _iso,
      upper, lower, title] = :binary.split(line, ";", [:global])
@@ -44,8 +30,8 @@ defmodule String.Unicode do
            to_binary.(lower),
            to_binary.(title)} | cacc],
          wacc}
-      String.starts_with?(decomposition, "<noBreak>") ->
-        {cacc, List.delete(wacc, to_binary.(codepoint))}
+      bidi in ["B", "S", "WS"] ->
+        {cacc, [to_binary.(codepoint) | wacc]}
       true ->
         {cacc, wacc}
     end
@@ -170,7 +156,7 @@ defmodule String.Unicode do
     :lists.reverse do_split(string, "", [])
   end
 
-  for codepoint <- breakable_whitespace do
+  for codepoint <- whitespace do
     defp do_split(unquote(codepoint) <> rest, buffer, acc) do
       do_split(rest, "", add_buffer_to_acc(buffer, acc))
     end

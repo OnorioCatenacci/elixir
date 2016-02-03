@@ -1380,8 +1380,8 @@ defmodule Enum do
       Enum.reduce(enumerable, :first, fn
         entry, {{_, fun_min} = acc_min, {_, fun_max} = acc_max} ->
           fun_entry = fun.(entry)
-          acc_min = if fun_entry < fun_min, do: {entry, fun_entry}, else: acc_min
-          acc_max = if fun_entry > fun_max, do: {entry, fun_entry}, else: acc_max
+          if fun_entry < fun_min, do: acc_min = {entry, fun_entry}
+          if fun_entry > fun_max, do: acc_max = {entry, fun_entry}
           {acc_min, acc_max}
         entry, :first ->
           fun_entry = fun.(entry)
@@ -1517,7 +1517,7 @@ defmodule Enum do
   If you wish to use another value for the accumulator, use
   `Enumerable.reduce/3`.
   This function won't call the specified function for enumerables that
-  are one-element long.
+  are 1-element long.
 
   Returns the accumulator.
 
@@ -2157,7 +2157,9 @@ defmodule Enum do
   Takes random items from the enumerable.
 
   Notice this function will traverse the whole enumerable to
-  get the random sublist of `enumerable`.
+  get the random sublist of `enumerable`. If you want the random
+  number between two integers, the best option is to use the
+  [`:rand`](http://www.erlang.org/doc/man/rand.html) module.
 
   See `random/1` for notes on implementation and random seed.
 
@@ -2173,14 +2175,6 @@ defmodule Enum do
   """
   @spec take_random(t, integer) :: list
   def take_random(_enumerable, 0), do: []
-
-  def take_random(first..last, 1) when first > last do
-    take_random(last..first, 1)
-  end
-
-  def take_random(first..last, 1) do
-    [random_index(last - first) + first]
-  end
 
   def take_random(enumerable, count) when count > 128 do
     reducer = fn(elem, {idx, sample}) ->
@@ -2307,8 +2301,8 @@ defmodule Enum do
       iex> Enum.uniq_by([{1, :x}, {2, :y}, {1, :z}], fn {x, _} -> x end)
       [{1, :x}, {2, :y}]
 
-      iex> Enum.uniq_by([a: {:tea, 2}, b: {:tea, 2}, c: {:coffee, 1}],  fn {_, y} -> y end)
-      [a: {:tea, 2}, c: {:coffee, 1}]
+      Enum.uniq_by([{a: {tea: 2}}, {b: {tea: 2}}, {c, {coffe: 1}}], fn {x, _} -> x end)
+      [a: [tea: 2], b: [tea: 2]]
 
   """
   @spec uniq_by(t, (element -> term)) :: list

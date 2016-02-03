@@ -11,8 +11,8 @@ defmodule Kernel do
   environment.
 
   These macros and functions can be skipped or cherry-picked via the
-  `import/2` macro. For instance, if you want to tell Elixir not to
-  import the `if/2` macro, you can do:
+  `import` macro. For instance, if you want to tell Elixir not to
+  import the `if` macro, you can do:
 
       import Kernel, except: [if: 2]
 
@@ -253,7 +253,7 @@ defmodule Kernel do
       1
 
   """
-  @spec hd(maybe_improper_list) :: term
+  @spec hd(list) :: term
   def hd(list) do
     :erlang.hd(list)
   end
@@ -1575,7 +1575,7 @@ defmodule Kernel do
 
   The `struct` argument may be an atom (which defines `defstruct`)
   or a `struct` itself. The second argument is any `Enumerable` that
-  emits two-element tuples (key-value pairs) during enumeration.
+  emits two-item tuples (key-value pairs) during enumeration.
 
   Keys in the `Enumerable` that don't exist in the struct are automatically
   discarded. Note that keys must be atoms, as only atoms are allowed when
@@ -1810,7 +1810,7 @@ defmodule Kernel do
     do: Access.get_and_update(data, h, &get_and_update_in(&1, t, fun))
 
   @doc """
-  Pops a key from the given nested structure.
+  Deletes a key in a nested structure.
 
   Uses the `Access` protocol to traverse the structures
   according to the given `keys`, unless the `key` is a
@@ -1820,27 +1820,26 @@ defmodule Kernel do
   ## Examples
 
       iex> users = %{"john" => %{age: 27}, "meg" => %{age: 23}}
-      iex> pop_in(users, ["john", :age])
-      {27, %{"john" => %{}, "meg" => %{age: 23}}}
+      iex> delete_in(users, ["john", :age])
+      %{"john" => %{}, "meg" => %{age: 23}}
 
-  In case any entry returns `nil`, its key will be removed
-  and the deletion will be considered a success.
+  In case any entries in the middle returns `nil`,
+  the deletion will be considered a success.
   """
-  @spec pop_in(Access.t, nonempty_list(term)) :: Access.t
-  def pop_in(data, keys)
-  def pop_in(nil, [h|_]), do: Access.pop(nil, h)
-  def pop_in(data, keys), do: do_pop_in(data, keys)
+  @spec delete_in(Access.t, nonempty_list(term)) :: Access.t
+  def delete_in(data, keys) do
+    case do_delete_in(data, keys) do
+      {:skip, key} -> Access.delete(data, key)
+      {_, map} -> map
+    end
+  end
 
-  defp do_pop_in(nil, [_|_]),
-    do: :pop
-  defp do_pop_in(data, [h]) when is_function(h),
-    do: h.(:get_and_update, data, fn _ -> :pop end)
-  defp do_pop_in(data, [h|t]) when is_function(h),
-    do: h.(:get_and_update, data, &do_pop_in(&1, t))
-  defp do_pop_in(data, [h]),
-    do: Access.pop(data, h)
-  defp do_pop_in(data, [h|t]),
-    do: Access.get_and_update(data, h, &do_pop_in(&1, t))
+  defp do_delete_in(nil, [h|_]),
+    do: {:skip, h}
+  defp do_delete_in(data, [h]),
+    do: {nil, Access.delete(data, h)}
+  defp do_delete_in(data, [h|t]),
+    do: Access.get_and_update(data, h, &do_delete_in(&1, t))
 
   @doc """
   Puts a value in a nested structure via the given `path`.
@@ -1880,16 +1879,16 @@ defmodule Kernel do
   end
 
   @doc """
-  Pops a key from the nested structure via the given `path`.
+  Deletes a key in a nested structure via the given `path`.
 
-  This is similar to `pop_in/2`, except the path is extracted via
+  This is similar to `delete_in/2`, except the path is extracted via
   a macro rather than passing a list. For example:
 
-      pop_in(opts[:foo][:bar])
+      delete_in(opts[:foo][:bar])
 
   Is equivalent to:
 
-      pop_in(opts, [:foo, :bar])
+      delete_in(opts, [:foo, :bar])
 
   Note that in order for this macro to work, the complete path must always
   be visible by this macro. For more information about the supported path
@@ -1898,19 +1897,22 @@ defmodule Kernel do
   ## Examples
 
       iex> users = %{"john" => %{age: 27}, "meg" => %{age: 23}}
-      iex> pop_in(users["john"][:age])
-      {27, %{"john" => %{}, "meg" => %{age: 23}}}
+      iex> delete_in(users["john"][:age])
+      %{"john" => %{}, "meg" => %{age: 23}}
 
-      iex> users = %{john: %{age: 27}, meg: %{age: 23}}
-      iex> pop_in(users.john[:age])
-      {27, %{john: %{}, meg: %{age: 23}}}
+      iex> users = %{"john" => %{age: 27}, "meg" => %{age: 23}}
+      iex> delete_in(users["john"].age)
+      %{"john" => %{}, "meg" => %{age: 23}}
 
-  In case any entry returns `nil`, its key will be removed
-  and the deletion will be considered a success.
   """
-  defmacro pop_in(path) do
-    {[h|t], _} = unnest(path, [], true, "pop_in/1")
-    nest_pop_in(:map, h, t)
+  defmacro delete_in(path) do
+    case unnest(path, [], true, "delete_in/1") do
+      {[h|t], true} ->
+        nest_delete_in(h, t)
+      {[h|t], false} ->
+        expr = nest_delete_in_from_access(h, t)
+        quote do: :erlang.element(2, unquote(expr))
+    end
   end
 
   @doc """
@@ -2036,42 +2038,50 @@ defmodule Kernel do
     end
   end
 
-  defp nest_pop_in(kind, list) do
+  defp nest_delete_in(list) do
     quote do
-      fn x -> unquote(nest_pop_in(kind, quote(do: x), list)) end
+      fn x -> unquote(nest_delete_in(quote(do: x), list)) end
+    end
+  end
+  defp nest_delete_in(h, [{:map, key}]) do
+    quote do
+      Map.delete(unquote(h), unquote(key))
+    end
+  end
+  defp nest_delete_in(h, [{:map, key}|t]) do
+    quote do
+      Map.update!(unquote(h), unquote(key), unquote(nest_delete_in(t)))
     end
   end
 
-  defp nest_pop_in(:map, h, [{:access, key}]) do
+  defp nest_delete_in_from_access(list) do
+    quote do
+      fn x -> unquote(nest_delete_in_from_access(quote(do: x), list)) end
+    end
+  end
+  defp nest_delete_in_from_access(h, [{:map, _key}]=list) do
+    {:ok, nest_delete_in(h, list)}
+  end
+  defp nest_delete_in_from_access(h, [{:access, key}]) do
     quote do
       case unquote(h) do
-        nil -> {nil, nil}
-        h   -> Access.pop(h, unquote(key))
+        nil -> {:skip, nil}
+        h -> {:ok, Access.delete(h, unquote(key))}
       end
     end
   end
-
-  defp nest_pop_in(_, _, [{:map, key}]) do
-    raise ArgumentError, "cannot use pop_in when the last segment is a map/struct field. " <>
-                         "This would effectively remove the field #{inspect key} from the map/struct"
-  end
-  defp nest_pop_in(_, h, [{:map, key}|t]) do
+  defp nest_delete_in_from_access(nil=h, [{:access, key}|_]) do
     quote do
-      Map.get_and_update!(unquote(h), unquote(key), unquote(nest_pop_in(:map, t)))
+      Access.delete(unquote(h), unquote(key))
     end
   end
-
-  defp nest_pop_in(_, h, [{:access, key}]) do
+  defp nest_delete_in_from_access(h, [{:access, key}|t]) do
     quote do
-      case unquote(h) do
-        nil -> :pop
-        h   -> Access.pop(h, unquote(key))
-      end
-    end
-  end
-  defp nest_pop_in(_, h, [{:access, key}|t]) do
-    quote do
-      Access.get_and_update(unquote(h), unquote(key), unquote(nest_pop_in(:access, t)))
+      Access.get_and_update(
+        unquote(h),
+        unquote(key),
+        unquote(nest_delete_in_from_access(t))
+      )
     end
   end
 
@@ -2392,7 +2402,7 @@ defmodule Kernel do
   end
 
   @doc """
-  Provides an `if/2` macro.
+  Provides an `if` macro.
 
   This macro expects the first argument to be a condition and the second
   argument to be a keyword list.
@@ -2411,7 +2421,7 @@ defmodule Kernel do
 
   ## Blocks examples
 
-  It's also possible to pass a block to the `if/2` macro. The first
+  It's also possible to pass a block to the `if` macro. The first
   example above would be translated to:
 
       if foo do
@@ -2554,7 +2564,7 @@ defmodule Kernel do
       true
 
   """
-  defmacro first..last do
+  defmacro first .. last do
     case is_float(first) or is_float(last) or
          is_atom(first) or is_atom(last) or
          is_binary(first) or is_binary(last) or
@@ -2754,7 +2764,7 @@ defmodule Kernel do
 
   ## Guards
 
-  The `in/2` operator can be used in guard clauses as long as the
+  The `in` operator can be used in guard clauses as long as the
   right-hand side is a range or a list. In such cases, Elixir will expand the
   operator to a valid guard expression. For example:
 
@@ -3434,7 +3444,7 @@ defmodule Kernel do
   ## Examples
 
   In Elixir, only `false` and `nil` are considered falsy values.
-  Everything else evaluates to `true` in `if/2` clauses. Depending
+  Everything else evaluates to `true` in `if` clauses. Depending
   on the application, it may be important to specify a `blank?`
   protocol that returns a boolean for other data types that should
   be considered "blank". For instance, an empty list or an empty
@@ -3509,9 +3519,7 @@ defmodule Kernel do
       end
 
   If a protocol is not found for a given type, it will fallback to
-  `Any`. Protocols that are implemented for maps don't work by default
-  on structs; look at `defstruct/1` for more information about deriving
-  protocols.
+  `Any`.
 
   ## Fallback to any
 
@@ -3668,10 +3676,10 @@ defmodule Kernel do
         end
       end
 
-  By calling `use/2`, a hook called `__using__/1` will be invoked in
+  By calling `use`, a hook called `__using__` will be invoked in
   `ExUnit.Case` which will then do the proper setup.
 
-  Simply put, `use/2` translates to:
+  Simply put, `use` translates to:
 
       defmodule AssertionTest do
         require ExUnit.Case
@@ -3695,11 +3703,11 @@ defmodule Kernel do
 
   ## Best practices
 
-  `__using__/1` is typically used when there is a need to set some state
+  `__using__` is typically used when there is a need to set some state
   (via module attributes) or callbacks (like `@before_compile`)
   into the caller.
 
-  `__using__/1` may also be used to alias, require or import functionality
+  `__using__` may also be used to alias, require or import functionality
   from different modules:
 
       defmodule MyModule do
@@ -3714,7 +3722,7 @@ defmodule Kernel do
         end
       end
 
-  However, do not provide `__using__/1` if all it does is to import,
+  However, do not provide `__using__` if all it does is to import,
   alias or require the module itself. For example, do not:
 
       defmodule MyModule do
@@ -3727,10 +3735,10 @@ defmodule Kernel do
 
   In such cases, developers must just import or alias the module
   directly, allowing developers to customize those as they wish,
-  without the indirection behind `use/2`.
+  without the indirection behind `use`.
 
   Finally, developers should also avoid defining functions inside
-  the `__using__/1` callback, unless those functions are the default
+  the `__using__` callback, unless those functions are the default
   implementation of a previously defined `@callback`. In case you
   want to provide some existing functionality to the user module,
   please define it in a module which will be imported accordingly.
@@ -3768,7 +3776,7 @@ defmodule Kernel do
 
   Functions defined with `defdelegate/2` are public and can be invoked from
   outside the module they're defined in (like if they were defined using
-  `def/2`). When the desire is to delegate as private functions, `import/2` should
+  `def/2`). When the desire is to delegate as private functions, `import` should
   be used.
 
   Delegation only works with functions; delegating macros is not supported.
@@ -4042,32 +4050,30 @@ defmodule Kernel do
     split_words(string, modifiers)
   end
 
-  defp split_words(string, []) do
-    split_words(string, [?s])
-  end
+  defp split_words("", _modifiers), do: []
 
-  defp split_words(string, [mod])
-  when mod == ?s or mod == ?a or mod == ?c do
+  defp split_words(string, modifiers) do
+    mod =
+      case modifiers do
+        [] -> ?s
+        [mod] when mod == ?s or mod == ?a or mod == ?c -> mod
+        _else -> raise ArgumentError, "modifier must be one of: s, a, c"
+      end
+
     case is_binary(string) do
       true ->
-        parts = String.split(string)
         case mod do
-          ?s -> parts
-          ?a -> :lists.map(&String.to_atom/1, parts)
-          ?c -> :lists.map(&String.to_char_list/1, parts)
+          ?s -> String.split(string)
+          ?a -> for p <- String.split(string), do: String.to_atom(p)
+          ?c -> for p <- String.split(string), do: String.to_char_list(p)
         end
       false ->
-        parts = quote(do: String.split(unquote(string)))
         case mod do
-          ?s -> parts
-          ?a -> quote(do: :lists.map(&String.to_atom/1, unquote(parts)))
-          ?c -> quote(do: :lists.map(&String.to_char_list/1, unquote(parts)))
+          ?s -> quote do: String.split(unquote(string))
+          ?a -> quote do: for(p <- String.split(unquote(string)), do: String.to_atom(p))
+          ?c -> quote do: for(p <- String.split(unquote(string)), do: String.to_char_list(p))
         end
     end
-  end
-
-  defp split_words(_string, _mods) do
-    raise ArgumentError, "modifier must be one of: s, a, c"
   end
 
   ## Shared functions

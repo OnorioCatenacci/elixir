@@ -2,7 +2,7 @@ defmodule Keyword do
   @moduledoc """
   A set of functions for working with keywords.
 
-  A keyword is a list of two-element tuples where the first
+  A keyword is a list of 2-element tuples where the first
   element of the tuple is an atom and the second element
   can be any value.
 
@@ -191,14 +191,12 @@ defmodule Keyword do
   Gets the value from `key` and updates it, all in one pass.
 
   This `fun` argument receives the value of `key` (or `nil` if `key`
-  is not present) and must return a two-element tuple: the "get" value (the
+  is not present) and must return a two-elements tuple: the "get" value (the
   retrieved value, which can be operated on before being returned) and the new
   value to be stored under `key`.
 
-  The returned value may be a tuple with the "get" value returned by
-  `fun` and a new keyword list with the updated value under `key`. The
-  function may also return `:pop`, implying the current value shall
-  be removed from the keyword list and returned.
+  The returned value is a tuple with the "get" value returned by `fun` and a new
+  keyword list with the updated value under `key`.
 
   ## Examples
 
@@ -212,23 +210,15 @@ defmodule Keyword do
       ...> end)
       {nil, [b: "new value!", a: 1]}
 
-      iex> Keyword.get_and_update([a: 1], :a, fn _ -> :pop end)
-      {1, []}
-
-      iex> Keyword.get_and_update([a: 1], :b, fn _ -> :pop end)
-      {nil, [a: 1]}
-
   """
-  @spec get_and_update(t, key, (value -> {get, value} | :pop)) :: {get, t} when get: term
+  @spec get_and_update(t, key, (value -> {get, value})) :: {get, t} when get: term
   def get_and_update(keywords, key, fun)
     when is_list(keywords) and is_atom(key),
     do: get_and_update(keywords, [], key, fun)
 
-  defp get_and_update([{key, current}|t], acc, key, fun) do
-    case fun.(current) do
-      {get, value} -> {get, :lists.reverse(acc, [{key, value}|t])}
-      :pop         -> {current, :lists.reverse(acc, t)}
-    end
+  defp get_and_update([{key, value}|t], acc, key, fun) do
+    {get, new_value} = fun.(value)
+    {get, :lists.reverse(acc, [{key, new_value}|t])}
   end
 
   defp get_and_update([h|t], acc, key, fun),
@@ -236,8 +226,8 @@ defmodule Keyword do
 
   defp get_and_update([], acc, key, fun) do
     case fun.(nil) do
+      {:skip, _} -> {:ok, acc}
       {get, update} -> {get, [{key, update}|:lists.reverse(acc)]}
-      :pop -> {nil, :lists.reverse(acc)}
     end
   end
 
@@ -245,7 +235,7 @@ defmodule Keyword do
   Gets the value from `key` and updates it. Raises if there is no `key`.
 
   This `fun` argument receives the value of `key` and must return a
-  two-element tuple: the "get" value (the retrieved value, which can be
+  two-elements tuple: the "get" value (the retrieved value, which can be
   operated on before being returned) and the new value to be stored under
   `key`.
 

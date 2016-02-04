@@ -2,7 +2,6 @@ defmodule Mix.Tasks.Deps.Tree do
   use Mix.Task
 
   @shortdoc "Prints the dependency tree"
-  @recursive true
 
   @moduledoc """
   Prints the dependency tree.

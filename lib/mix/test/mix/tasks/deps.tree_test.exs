@@ -16,7 +16,7 @@ defmodule Mix.Tasks.Deps.TreeTest do
     end
   end
 
-  defmodule OverriddenDepsApp do
+  defmodule OverridenDepsApp do
     def project do
       [
         app: :sample,
@@ -46,19 +46,6 @@ defmodule Mix.Tasks.Deps.TreeTest do
       assert_received {:mix_shell, :info, ["└── deps_on_git_repo 0.2.0 (" <> _]}
       assert_received {:mix_shell, :info, ["    └── git_repo (" <> _]}
     end
-  after
-    purge [DepsOnGitRepo.Mixfile, GitRepo.Mixfile]
-  end
-
-  test "show the dependency tree for umbrella apps" do
-    in_fixture "umbrella_dep/deps/umbrella", fn ->
-      Mix.Project.in_project(:umbrella, ".", fn _ ->
-        Mix.Task.run "deps.tree", ["--pretty"]
-        assert_received {:mix_shell, :info, ["foo"]}
-        assert_received {:mix_shell, :info, ["bar"]}
-        assert_received {:mix_shell, :info, ["└── foo (../foo)"]}
-      end)
-    end
   end
 
   test "shows the given dependency", context do
@@ -75,8 +62,8 @@ defmodule Mix.Tasks.Deps.TreeTest do
     end
   end
 
-  test "shows overridden deps", context do
-    Mix.Project.push OverriddenDepsApp
+  test "shows overriden deps", context do
+    Mix.Project.push OverridenDepsApp
 
     in_tmp context.test, fn ->
       Mix.Tasks.Deps.Tree.run(["--pretty"])
@@ -88,7 +75,7 @@ defmodule Mix.Tasks.Deps.TreeTest do
   end
 
   test "excludes the given deps", context do
-    Mix.Project.push OverriddenDepsApp
+    Mix.Project.push OverridenDepsApp
 
     in_tmp context.test, fn ->
       Mix.Tasks.Deps.Tree.run(["--pretty", "--exclude", "deps_on_git_repo"])
@@ -99,7 +86,7 @@ defmodule Mix.Tasks.Deps.TreeTest do
   end
 
   test "shows a particular environment", context do
-    Mix.Project.push OverriddenDepsApp
+    Mix.Project.push OverridenDepsApp
 
     in_tmp context.test, fn ->
       Mix.Tasks.Deps.Tree.run(["--pretty", "--only", "prod"])

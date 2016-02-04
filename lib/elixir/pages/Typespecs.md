@@ -87,12 +87,11 @@ Built-in type           | Defined as
 `list()`                | `[any()]`
 `maybe_improper_list()` | `maybe_improper_list(any(), any())`
 `nonempty_list()`       | `nonempty_list(any())`
-`iolist()`              | `maybe_improper_list(byte() \| binary() \| iolist(), binary() \| [])`
 `iodata()`              | `iolist()` \| `binary()`
+`iolist()`              | `maybe_improper_list(byte()` \| `binary()` \| `iolist(), binary()` \| `[])`
 `module()`              | `atom()` \| `tuple()`
 `arity()`               | `0..255`
 `mfa()`                 | `{atom(), atom(), arity()}`
-`identifier()`          | `pid()` \| `port()` \| `reference()`
 `node()`                | `atom()`
 `timeout()`             | `:infinity` \| `non_neg_integer()`
 `no_return()`           | `none()`
@@ -142,5 +141,3 @@ Specifications can be overloaded just like ordinary functions.
 Elixir discourages the use of type `string` as it might be confused with binaries which are referred to as "strings" in Elixir (as opposed to character lists). In order to use the type that is called `string` in Erlang, one has to use the `char_list` type which is a synonym for `string`. If you use `string`, you'll get a warning from the compiler.
 
 If you want to refer to the "string" type (the one operated on by functions in the `String` module), use `String.t` type instead.
-
-In map and struct type declarations such as `%{key: value}` or `%Struct{key: value}`, the key-value pair type information is not used by the current version of dialyzer.

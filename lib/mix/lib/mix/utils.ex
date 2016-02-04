@@ -143,7 +143,7 @@ defmodule Mix.Utils do
   must either return `{printed, children}` tuple or
   `false` if the given node must not be printed.
   """
-  @spec print_tree([term], (term -> {String.t, [term]}), Keyword.t) :: :ok
+  @spec print_tree([term], (term -> {String.t, [term]} | false), Keyword.t) :: :ok
   def print_tree(nodes, callback, opts \\ []) do
     pretty = Keyword.get(opts, :pretty, elem(:os.type, 0) != :win32)
     print_tree(nodes, [], pretty, callback)
@@ -151,9 +151,13 @@ defmodule Mix.Utils do
 
   defp print_tree([], _depth, _pretty, _callback), do: :ok
   defp print_tree([node | nodes], depth, pretty, callback) do
-    {print, children} =  callback.(node)
-    Mix.shell.info("#{depth(pretty, depth)}#{prefix(pretty, depth, nodes)}#{print}")
-    print_tree(children, [(nodes != []) | depth], pretty, callback)
+    case callback.(node) do
+      {print, children} ->
+        Mix.shell.info("#{depth(pretty, depth)}#{prefix(pretty, depth, nodes)}#{print}")
+        print_tree(children, [(nodes != []) | depth], pretty, callback)
+      false ->
+        :ok
+    end
     print_tree(nodes, depth, pretty, callback)
   end
 
@@ -310,16 +314,15 @@ defmodule Mix.Utils do
 
   defp checksum({:ok, binary} = return, opts) do
     Enum.find_value @checksums, return, fn hash ->
-      with expected when expected != nil  <- opts[hash],
-           actual when actual != expected <- hexhash(binary, hash) do
-        {:checksum, """
-          Data does not match the given sha512 checksum.
+      if (expected = Keyword.get(opts, hash)) &&
+         (actual = hexhash(binary, hash)) &&
+         expected != actual do
+          {:checksum, """
+            Data does not match the given sha512 checksum.
 
-          Expected: #{expected}
-            Actual: #{actual}
-          """}
-      else
-        _ -> nil
+            Expected: #{expected}
+              Actual: #{actual}
+            """}
       end
     end
   end

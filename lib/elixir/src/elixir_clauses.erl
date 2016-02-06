@@ -175,18 +175,15 @@ has_match_tuple(_) -> false.
 
 normalize_vars(Key, {Ref, Counter, _Safe},
                #elixir_scope{vars=Vars, export_vars=ClauseVars} = S) ->
-  Expr =
+  {Expr, Safe} =
     case maps:find(Key, Vars) of
       {ok, {PrevRef, _, _}} ->
-        {var, 0, PrevRef};
+        {{var, 0, PrevRef}, true};
       error ->
-        {atom, 0, nil}
+        {{atom, 0, nil}, false}
     end,
 
-  %% TODO: Unsafe vars should raise in future versions.
-  %% When we do so, we can simplify the export vars mechanism.
-  %% For Elixir v2.0, we will never export them.
-  Value = {Ref, Counter, false},
+  Value = {Ref, Counter, Safe},
 
   VS = S#elixir_scope{
     vars=maps:put(Key, Value, Vars),

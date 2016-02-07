@@ -44,9 +44,9 @@ defmodule URI do
   @doc """
   Encodes an enumerable into a query string.
 
-  Takes an enumerable (containing a sequence of two-element tuples)
-  and returns a string in the form of `key1=value1&key2=value2...` where
-  keys and values are URL encoded as per `encode_www_form/1`.
+  Takes an enumerable (containing a sequence of two-item tuples)
+  and returns a string of the form "key1=value1&key2=value2..." where
+  keys and values are URL encoded as per `encode/2`.
 
   Keys and values can be any term that implements the `String.Chars`
   protocol, except lists which are explicitly forbidden.
@@ -57,17 +57,13 @@ defmodule URI do
       iex> URI.encode_query(hd)
       "bar=2&foo=1"
 
-      iex> query = %{"key" => "value with spaces"}
-      iex> URI.encode_query(query)
-      "key=value+with+spaces"
-
   """
   def encode_query(l), do: Enum.map_join(l, "&", &pair/1)
 
   @doc """
   Decodes a query string into a map.
 
-  Given a query string of the form of `key1=value1&key2=value2...`, produces a
+  Given a query string of the form "key1=value1&key2=value2...", produces a
   map with one entry for each key-value pair. Each key and value will be a
   binary. Keys and values will be percent-unescaped.
 
@@ -328,12 +324,13 @@ defmodule URI do
     destructure [_, _, scheme, _, authority, path, _, query, _, fragment], parts
     {userinfo, host, port} = split_authority(authority)
 
-    authority = authority &&
-      IO.iodata_to_binary([
-        if(userinfo, do: userinfo <> "@", else: ""),
-        host || "",
-        if(port, do: ":" <> Integer.to_string(port), else: "")
-      ])
+    authority =
+      if authority do
+        ""
+        <> if(userinfo, do: userinfo <> "@", else: "")
+        <> (host || "")
+        <> if(port, do: ":" <> Integer.to_string(port), else: "")
+      end
 
     scheme = normalize_scheme(scheme)
     port   = port || (scheme && default_port(scheme))

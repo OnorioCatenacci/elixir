@@ -410,10 +410,6 @@ defmodule KernelTest do
     assert_raise KeyError, fn ->
       put_in(users["meg"].unknown, &(&1 + 1))
     end
-
-    assert_raise UndefinedFunctionError, fn ->
-      delete_in(struct(Sample, []).name)
-    end
   end
 
   test "get_and_update_in/3" do
@@ -470,10 +466,6 @@ defmodule KernelTest do
     assert_raise FunctionClauseError, fn ->
       delete_in(users, [])
     end
-
-    assert_raise ArgumentError, "could not delete key \"john\" on a nil value", fn ->
-      delete_in(nil, ["john", :age])
-    end
   end
 
   test "delete_in/1" do
@@ -481,19 +473,31 @@ defmodule KernelTest do
 
     assert delete_in(users["john"][:age]) ==
            %{"john" => %{}, "meg" => %{age: 23}}
-
-    assert delete_in(users["john"].age) ==
-           %{"john" => %{}, "meg" => %{age: 23}}
-
+    assert delete_in(users["john"][:name]) ==
+           %{"john" => %{age: 27}, "meg" => %{age: 23}}
     assert delete_in(users["bob"][:age]) ==
-          %{"john" => %{age: 27}, "meg" => %{age: 23}}
+           %{"john" => %{age: 27}, "meg" => %{age: 23}}
+
+    users = %{john: [age: 27], meg: [age: 23]}
+
+    assert delete_in(users.john[:age]) ==
+           %{john: [], meg: [age: 23]}
+    assert delete_in(users.john[:name]) ==
+           %{john: [age: 27], meg: [age: 23]}
 
     assert delete_in([][:foo][:bar]) == []
+    assert_raise KeyError, fn -> delete_in(users.bob[:age]) end
+  end
 
+  test "delete_in/1/2 with nils" do
+    users = %{"john" => nil, "meg" => %{age: 23}}
+    assert delete_in(users["john"][:age]) ==
+           %{"meg" => %{age: 23}}
+    assert delete_in(users, ["john", :age]) ==
+           %{"meg" => %{age: 23}}
 
-    assert_raise ArgumentError, "could not delete key \"john\" on a nil value", fn ->
-      delete_in(nil["john"][:age])
-    end
+    assert delete_in(nil["john"][:age]) == nil
+    assert delete_in(nil, ["john", :age]) == nil
   end
 
   test "paths" do

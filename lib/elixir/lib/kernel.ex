@@ -1823,23 +1823,24 @@ defmodule Kernel do
       iex> delete_in(users, ["john", :age])
       %{"john" => %{}, "meg" => %{age: 23}}
 
-  In case any entries in the middle returns `nil`,
-  the deletion will be considered a success.
+  In case any entry returns `nil`, its key will be removed
+  and the deletion will be considered a success.
   """
   @spec delete_in(Access.t, nonempty_list(term)) :: Access.t
   def delete_in(data, keys) do
-    case do_delete_in(data, keys) do
-      {:skip, key} -> Access.delete(data, key)
-      {_, map} -> map
-    end
+    :erlang.element(2, do_delete_in(data, keys))
   end
 
-  defp do_delete_in(nil, [h|_]),
-    do: {:skip, h}
+  defp do_delete_in(nil, [_|_]),
+    do: {:error, nil}
   defp do_delete_in(data, [h]),
-    do: {nil, Access.delete(data, h)}
-  defp do_delete_in(data, [h|t]),
-    do: Access.get_and_update(data, h, &do_delete_in(&1, t))
+    do: {:ok, Access.delete(data, h)}
+  defp do_delete_in(data, [h|t]) do
+    case Access.get_and_update(data, h, &do_delete_in(&1, t)) do
+      {:ok, data}    -> {:ok, data}
+      {:error, data} -> {:ok, Access.delete(data, h)}
+    end
+  end
 
   @doc """
   Puts a value in a nested structure via the given `path`.
@@ -1900,19 +1901,17 @@ defmodule Kernel do
       iex> delete_in(users["john"][:age])
       %{"john" => %{}, "meg" => %{age: 23}}
 
-      iex> users = %{"john" => %{age: 27}, "meg" => %{age: 23}}
-      iex> delete_in(users["john"].age)
-      %{"john" => %{}, "meg" => %{age: 23}}
+      iex> users = %{john: %{age: 27}, meg: %{age: 23}}
+      iex> delete_in(users.john[:age])
+      %{john: %{}, meg: %{age: 23}}
 
+  In case any entry returns `nil`, its key will be removed
+  and the deletion will be considered a success.
   """
   defmacro delete_in(path) do
-    case unnest(path, [], true, "delete_in/1") do
-      {[h|t], true} ->
-        nest_delete_in(h, t)
-      {[h|t], false} ->
-        expr = nest_delete_in_from_access(h, t)
-        quote do: :erlang.element(2, unquote(expr))
-    end
+    {[h|t], _} = unnest(path, [], true, "delete_in/1")
+    expr = nest_delete_in(h, t)
+    quote do: :erlang.element(2, unquote(expr))
   end
 
   @doc """
@@ -2043,46 +2042,43 @@ defmodule Kernel do
       fn x -> unquote(nest_delete_in(quote(do: x), list)) end
     end
   end
-  defp nest_delete_in(h, [{:map, key}]) do
-    quote do
-      Map.delete(unquote(h), unquote(key))
-    end
+
+  defp nest_delete_in(nil, [_|_]) do
+    {:error, nil}
+  end
+
+  defp nest_delete_in(_, [{:map, key}]) do
+    raise ArgumentError, "cannot use delete_in when the last segment is a map/struct field. " <>
+                         "This would effectively remove the field #{inspect key} from the map/struct"
   end
   defp nest_delete_in(h, [{:map, key}|t]) do
+    data =
+      case nest_delete_in(quote(do: x), t) do
+        {_, data} -> data
+        data      -> quote do: :erlang.element(2, unquote(data))
+      end
     quote do
-      Map.update!(unquote(h), unquote(key), unquote(nest_delete_in(t)))
+      {:ok, Map.update!(unquote(h), unquote(key), fn x -> unquote(data) end)}
     end
   end
 
-  defp nest_delete_in_from_access(list) do
-    quote do
-      fn x -> unquote(nest_delete_in_from_access(quote(do: x), list)) end
-    end
-  end
-  defp nest_delete_in_from_access(h, [{:map, _key}]=list) do
-    {:ok, nest_delete_in(h, list)}
-  end
-  defp nest_delete_in_from_access(h, [{:access, key}]) do
+  defp nest_delete_in(h, [{:access, key}]) do
     quote do
       case unquote(h) do
-        nil -> {:skip, nil}
-        h -> {:ok, Access.delete(h, unquote(key))}
+        nil -> {:error, nil}
+        h   -> {:ok, Access.delete(h, unquote(key))}
       end
     end
   end
-  defp nest_delete_in_from_access(nil=h, [{:access, key}|_]) do
-    quote do
-      Access.delete(unquote(h), unquote(key))
-    end
-  end
-  defp nest_delete_in_from_access(h, [{:access, key}|t]) do
-    quote do
-      Access.get_and_update(
-        unquote(h),
-        unquote(key),
-        unquote(nest_delete_in_from_access(t))
-      )
-    end
+  defp nest_delete_in(h, [{:access, key}|t]) do
+    {:ok,
+      quote do
+        key = unquote(key)
+        case Access.get_and_update(unquote(h), key, unquote(nest_delete_in(t))) do
+          {:ok, data}    -> data
+          {:error, data} -> Access.delete(data, key)
+        end
+      end}
   end
 
   defp unnest({{:., _, [Access, :get]}, _, [expr, key]}, acc, _all_map?, kind) do

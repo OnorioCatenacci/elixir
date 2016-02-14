@@ -160,7 +160,7 @@ defimpl Inspect, for: BitString do
     escape(other, char, <<>>)
   end
 
-  defp escape(<<char, t::binary>>, char, binary) do
+  defp escape(<<char, t::binary >>, char, binary) do
     escape(t, char, <<binary::binary, ?\\, char>>)
   end
   defp escape(<<?#, ?{, t::binary>>, char, binary) do
@@ -197,11 +197,11 @@ defimpl Inspect, for: BitString do
     escape(t, char, <<binary::binary, ?\\, ?v>>)
   end
   defp escape(<<h::utf8, t::binary>>, char, binary) do
-    head = <<h::utf8>>
+    head = <<h::utf8 >>
     if String.printable?(head) do
       escape(t, char, append(head, binary))
     else
-      <<byte::8, h::binary>> = head
+      <<byte::8, h::binary >> = head
       t = <<h::binary, t::binary>>
       escape(t, char, <<binary::binary, escape_char(byte)::binary>>)
     end
@@ -258,18 +258,18 @@ defimpl Inspect, for: BitString do
   end
 
   defp each_bit(<<h::8>>, _counter, opts) do
-    Inspect.Integer.inspect(h, opts)
+    Inspect.inspect(h, opts)
   end
 
   defp each_bit(<<h, t::bitstring>>, counter, opts) do
-    glue(concat(Inspect.Integer.inspect(h, opts), ","),
+    glue(concat(Inspect.inspect(h, opts), ","),
          each_bit(t, decrement(counter), opts))
   end
 
   defp each_bit(bitstring, _counter, opts) do
     size = bit_size(bitstring)
     <<h::size(size)>> = bitstring
-    Inspect.Integer.inspect(h, opts) <> "::size(" <> Integer.to_string(size) <> ")"
+    Inspect.inspect(h, opts) <> "::size(" <> Integer.to_string(size) <> ")"
   end
 
   defp decrement(:infinity), do: :infinity

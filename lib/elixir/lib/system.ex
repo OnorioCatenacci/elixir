@@ -5,8 +5,8 @@ defmodule System do
   with the VM or the host system.
   """
 
-  @base_dir     :filename.join(__DIR__, "../../..")
-  @version_file :filename.join(@base_dir, "VERSION")
+  @base_dir      :filename.join(__DIR__, "../../..")
+  @version_file  :filename.join(@base_dir, "VERSION")
 
   defp strip(iodata) do
     :re.replace(iodata, "^[\s\r\n\t]+|[\s\r\n\t]+$", "", [:global, return: :binary])
@@ -30,13 +30,21 @@ defmodule System do
   end
 
   # Tries to run "git rev-parse --short HEAD". In the case of success returns
-  # the short revision hash. If that fails, returns an empty string.
+  # the short revision hash. If that is not available, tries to read the commit hash
+  # from .git/HEAD. If that fails, returns an empty string.
   defmacrop get_revision do
-    :os.cmd('git rev-parse --short HEAD 2> /dev/null')
-    |> strip
+    dirpath = :filename.join(__DIR__, "../../../.git")
+    case :file.read_file_info(dirpath) do
+      {:ok, _} ->
+        if :os.find_executable('git') do
+          data = :os.cmd('git rev-parse --short HEAD')
+          strip(data)
+        else
+          read_stripped(:filename.join(".git", "HEAD"))
+        end
+      _ -> ""
+    end
   end
-
-  defp revision, do: get_revision
 
   # Get the date at compilation time.
   defmacrop get_date do
@@ -73,23 +81,7 @@ defmodule System do
   """
   @spec build_info() :: map
   def build_info do
-    %{build:    build,
-      date:     get_date,
-      revision: revision,
-      version:  version,
-      }
-  end
-
-  # Returns a string of the build info
-  defp build do
-    {:ok, v} = Version.parse(version)
-
-    cond do
-      ([] == v.pre) or ("" == revision) ->
-        version
-      true ->
-        "#{version} (#{revision})"
-    end
+    %{version: version, date: get_date, revision: get_revision}
   end
 
   @doc """

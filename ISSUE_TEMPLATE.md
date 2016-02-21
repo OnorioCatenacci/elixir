@@ -10,9 +10,9 @@
 * Elixir version (elixir -v):
 * Operating system:
 
-### Current behavior
-
-Include code samples, errors and stacktraces if appropriate.
-
 ### Expected behavior
+
+
+
+### Actual behavior
 

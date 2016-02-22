@@ -23,17 +23,13 @@ defmodule Macro do
 
       defmodule MySigils do
         defmacro sigil_x(term, [?r]) do
-          quote do
-            unquote(term) |> String.reverse()
-          end
+          quote do: unquote(term) |> String.reverse()
         end
         defmacro sigil_x(term, _modifiers) do
           term
         end
         defmacro sigil_X(term, [?r]) do
-          quote do
-            unquote(term) |> String.reverse()
-          end
+          quote do: unquote(term) |> String.reverse()
         end
         defmacro sigil_X(term, _modifiers) do
           term
@@ -296,19 +292,19 @@ defmodule Macro do
 
   ## Examples
 
-      iex> Macro.decompose_call(quote(do: foo))
+      iex> Macro.decompose_call(quote do: foo)
       {:foo, []}
 
-      iex> Macro.decompose_call(quote(do: foo()))
+      iex> Macro.decompose_call(quote do: foo())
       {:foo, []}
 
-      iex> Macro.decompose_call(quote(do: foo(1, 2, 3)))
+      iex> Macro.decompose_call(quote do: foo(1, 2, 3))
       {:foo, [1, 2, 3]}
 
-      iex> Macro.decompose_call(quote(do: Elixir.M.foo(1, 2, 3)))
+      iex> Macro.decompose_call(quote do: Elixir.M.foo(1, 2, 3))
       {{:__aliases__, [], [:Elixir, :M]}, :foo, [1, 2, 3]}
 
-      iex> Macro.decompose_call(quote(do: 42))
+      iex> Macro.decompose_call(quote do: 42)
       :error
 
   """
@@ -356,24 +352,8 @@ defmodule Macro do
   @doc """
   Validates the given expressions are valid quoted expressions.
 
-  Checks the `type:Macro.t` for the specification of a valid
+  Check the `type:Macro.t` for the specification of a valid
   quoted expression.
-
-  It returns `:ok` if the expression is valid. Otherwise it returns a tuple in the form of
-  `{:error, remainder}` where `remainder` is the invalid part of the quoted expression.
-
-  ## Examples
-
-      iex> Macro.validate({:two_element, :tuple})
-      :ok
-      iex> Macro.validate({:three, :element, :tuple})
-      {:error, {:three, :element, :tuple}}
-
-      iex> Macro.validate([1, 2, 3])
-      :ok
-      iex> Macro.validate([1, 2, 3, {4}])
-      {:error, {4}}
-
   """
   @spec validate(term) :: :ok | {:error, term}
   def validate(expr) do
@@ -509,7 +489,7 @@ defmodule Macro do
 
   ## Examples
 
-      iex> Macro.to_string(quote(do: foo.bar(1, 2, 3)))
+      iex> Macro.to_string(quote do: foo.bar(1, 2, 3))
       "foo.bar(1, 2, 3)"
 
   """
@@ -673,7 +653,7 @@ defmodule Macro do
     end
   end
 
-  # Two-element tuples
+  # Two-item tuples
   def to_string({left, right}, fun) do
     to_string({:{}, [], [left, right]}, fun)
   end
@@ -1151,11 +1131,6 @@ defmodule Macro do
     <<to_lower_char(h)>> <> do_underscore(t, h)
   end
 
-  defp do_underscore(<<h, t::binary>>, prev)
-      when (h >= ?0 and h <= ?9) and (prev >= ?a and prev <= ?z) do
-    <<?_, h>> <> do_underscore(t, h)
-  end
-
   defp do_underscore(<<h, t, rest::binary>>, _)
       when (h >= ?A and h <= ?Z) and not (t >= ?A and t <= ?Z) and t != ?. do
     <<?_, to_lower_char(h), t>> <> do_underscore(rest, t)
@@ -1204,9 +1179,6 @@ defmodule Macro do
 
   defp do_camelize(<<?_, h, t::binary>>) when h >= ?a and h <= ?z,
     do: <<to_upper_char(h)>> <> do_camelize(t)
-
-  defp do_camelize(<<?_, h, t::binary>>) when h >= ?0 and h <= ?9,
-    do: <<h>> <> do_camelize(t)
 
   defp do_camelize(<<?_>>),
     do: <<>>

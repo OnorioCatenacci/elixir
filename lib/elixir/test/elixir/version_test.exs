@@ -196,11 +196,8 @@ defmodule VersionTest do
     refute V.match?("1.1.0-beta", "~> 1.0", allow_pre: false)
     assert V.match?("1.0.1-beta", "~> 1.0.0-beta", allow_pre: false)
 
-    assert V.match?("1.1.0", ">= 1.0.0", allow_pre: true)
     assert V.match?("1.1.0", ">= 1.0.0", allow_pre: false)
-    assert V.match?("1.1.0-beta", ">= 1.0.0", allow_pre: true)
-    refute V.match?("1.1.0-beta", ">= 1.0.0", allow_pre: false)
-    assert V.match?("1.1.0-beta", ">= 1.0.0-beta", allow_pre: false)
+    assert V.match?("1.1.0-beta", ">= 1.0.0", allow_pre: false)
   end
 
   test "and" do
@@ -214,13 +211,5 @@ defmodule VersionTest do
     assert V.match?("0.9.5", "0.9.1 or 0.9.3 or 0.9.5")
 
     refute V.match?("0.9.6", "0.9.1 or 0.9.3 or 0.9.5")
-  end
-
-  test "compile requirement" do
-    {:ok, req} = V.parse_requirement("1.2.3")
-    req = V.compile_requirement(req)
-
-    assert V.match?("1.2.3", req)
-    refute V.match?("1.2.4", req)
   end
 end

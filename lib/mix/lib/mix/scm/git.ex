@@ -45,28 +45,28 @@ defmodule Mix.SCM.Git do
   end
 
   def lock_status(opts) do
-    assert_git!()
-    lock = opts[:lock]
+    assert_git
 
-    cond do
-      lock_rev = get_lock_rev(lock, opts) ->
+    case opts[:lock] do
+      {:git, lock_repo, lock_rev, lock_opts} ->
         File.cd!(opts[:dest], fn ->
-          %{origin: origin, rev: rev} = get_rev_info()
-          if get_lock_repo(lock) == origin and lock_rev == rev do
-            :ok
-          else
-            :mismatch
+          rev_info = get_rev_info
+          cond do
+            not lock_up_to_date?(opts)     -> :outdated
+            lock_rev  != rev_info[:rev]    -> :mismatch
+            lock_repo != rev_info[:origin] -> :mismatch
+            true                           -> :ok
           end
         end)
-      is_nil(lock) ->
+      nil ->
         :mismatch
-      true ->
+      _ ->
         :outdated
     end
   end
 
   def equal?(opts1, opts2) do
-    opts1[:git] == opts2[:git] and
+    git_repos_match?(opts1[:git], opts2[:git]) &&
       get_lock_opts(opts1) == get_lock_opts(opts2)
   end
 
@@ -75,7 +75,7 @@ defmodule Mix.SCM.Git do
   end
 
   def checkout(opts) do
-    assert_git!()
+    assert_git
 
     path     = opts[:dest]
     location = opts[:git]
@@ -87,9 +87,10 @@ defmodule Mix.SCM.Git do
   end
 
   def update(opts) do
-    assert_git!()
+    assert_git
 
     File.cd! opts[:dest], fn ->
+      # Ensures origin is set the lock repo
       location = opts[:git]
       update_origin(location)
 
@@ -121,8 +122,8 @@ defmodule Mix.SCM.Git do
   end
 
   defp do_checkout(opts) do
-    rev = get_lock_rev(opts[:lock], opts) || get_opts_rev(opts)
-    git!("--git-dir=.git checkout --quiet #{rev}")
+    ref = get_lock_rev_if_lock_up_to_date(opts) || get_opts_rev(opts)
+    git!("--git-dir=.git checkout --quiet #{ref}")
 
     if opts[:submodules] do
       git!("--git-dir=.git submodule update --init --recursive")
@@ -132,25 +133,28 @@ defmodule Mix.SCM.Git do
   end
 
   defp get_lock(opts) do
-    %{rev: rev} = get_rev_info()
-    {:git, opts[:git], rev, get_lock_opts(opts)}
+    rev_info = get_rev_info()
+    {:git, opts[:git], rev_info[:rev], get_lock_opts(opts)}
   end
 
-  defp get_lock_repo({:git, repo, _, _}), do: repo
-
-  defp get_lock_rev({:git, repo, lock, lock_opts}, opts) when is_binary(lock) do
-    if repo == opts[:git] and lock_opts == get_lock_opts(opts) do
-      lock
-    end
-  end
-  defp get_lock_rev(_, _), do: nil
+  defp get_lock_rev({:git, _repo, lock, _opts}) when is_binary(lock), do: lock
+  defp get_lock_rev(_), do: nil
 
   defp get_lock_opts(opts) do
-    lock_opts = Keyword.take(opts, [:branch, :ref, :tag])
+    lock_opts = Enum.find_value [:branch, :ref, :tag], &List.keyfind(opts, &1, 0)
+    lock_opts = List.wrap(lock_opts)
     if opts[:submodules] do
       lock_opts ++ [submodules: true]
     else
       lock_opts
+    end
+  end
+
+  defp get_lock_rev_if_lock_up_to_date(opts) do
+    if lock_up_to_date?(opts) do
+      get_lock_rev(opts[:lock])
+    else
+      nil
     end
   end
 
@@ -167,7 +171,7 @@ defmodule Mix.SCM.Git do
       :os.cmd('git --git-dir=.git config remote.origin.url && git --git-dir=.git rev-parse --verify --quiet HEAD')
       |> IO.iodata_to_binary
       |> String.split("\n", trim: true)
-    %{origin: origin, rev: rev}
+    [origin: origin, rev: rev]
   end
 
   defp update_origin(location) do
@@ -182,7 +186,7 @@ defmodule Mix.SCM.Git do
     :ok
   end
 
-  defp assert_git! do
+  defp assert_git do
     case Mix.State.fetch(:git_available) do
       {:ok, true} ->
         :ok
@@ -213,6 +217,14 @@ defmodule Mix.SCM.Git do
     end
   end
 
+  defp git_repos_match?(repo_a, repo_b) do
+    normalize_github_repo(repo_a) == normalize_github_repo(repo_b)
+  end
+
+  # TODO: Remove this on Elixir v2.0 to push everyone to https
+  defp normalize_github_repo("git://github.com/" <> rest), do: "https://github.com/#{rest}"
+  defp normalize_github_repo(repo), do: repo
+
   defp parse_version("git version " <> version) do
     String.split(version, ".")
     |> Enum.take(3)
@@ -223,5 +235,14 @@ defmodule Mix.SCM.Git do
   defp to_integer(string) do
     {int, _} = Integer.parse(string)
     int
+  end
+
+  defp lock_up_to_date?(opts) do
+    case opts[:lock] do
+      {:git, repo, _rev, lock_opts} ->
+        git_repos_match?(repo, opts[:git]) and lock_opts == get_lock_opts(opts)
+      _ ->
+        false
+    end
   end
 end

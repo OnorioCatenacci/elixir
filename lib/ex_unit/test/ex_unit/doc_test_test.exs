@@ -203,8 +203,13 @@ end |> write_beam
 
 defmodule ExUnit.DocTestTest.Numbered do
   @doc """
+<<<<<<< HEAD
   iex(1)> 1 +
   ...(1)> 2
+=======
+  iex(1)> x = 1 + 2
+  ...(1)> x
+>>>>>>> Fix doctests parsing when IEx prefix contains a number
   3
   """
   def test_fun(), do: :ok

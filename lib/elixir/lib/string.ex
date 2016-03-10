@@ -238,11 +238,10 @@ defmodule String do
   def printable?(<<>>), do: true
   def printable?(binary) when is_binary(binary), do: false
 
-  @doc ~S"""
+  @doc """
   Divides a string into substrings at each Unicode whitespace
   occurrence with leading and trailing whitespace ignored. Groups
-  of whitespace are treated as a single occurrence. Divisions do
-  not occur on non-breaking whitespace.
+  of whitespace are treated as a single occurrence.
 
   ## Examples
 
@@ -254,9 +253,6 @@ defmodule String do
 
       iex> String.split(" foo   bar ")
       ["foo", "bar"]
-
-      iex> String.split("no\u00a0break")
-      ["no\u00a0break"]
 
   """
   @spec split(t) :: [t]

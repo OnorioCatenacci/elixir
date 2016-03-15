@@ -3,8 +3,6 @@ defmodule Mix.Local do
 
   @public_keys_html "https://s3.amazonaws.com/s3.hex.pm/installs/public_keys.html"
 
-  @type item :: :archive | :escript
-
   @doc """
   Returns the name for an archive or an escript, based on on the project config.
 

@@ -5,8 +5,6 @@ defmodule Mix.Local do
 
   @type item :: :archive | :escript
 
-  @type item :: :archive | :escript
-
   @doc """
   Returns the name for an archive or an escript, based on on the project config.
 

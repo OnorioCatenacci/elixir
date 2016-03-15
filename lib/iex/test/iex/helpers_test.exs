@@ -372,6 +372,15 @@ defmodule IEx.HelpersTest do
     cleanup_modules([Sample])
   end
 
+  test "nl helper" do
+    assert nl(:non_existent_module) == {:error, :nofile}
+    assert nl([node], Enum) == {:ok, [{:nonode@nohost, :loaded, Enum}]}    
+    assert nl([:nosuchnode@badhost], Enum) == {:ok, [{:nosuchnode@badhost, :badrpc, :nodedown}]}
+    capture_log fn -> 
+      assert nl([node], :lists) == {:ok, [{:nonode@nohost, :error, :sticky_directory}]} 
+    end
+  end
+
   test "r helper unavailable" do
     assert_raise ArgumentError, "could not load nor find module: :non_existent_module", fn ->
       r :non_existent_module
@@ -419,7 +428,14 @@ defmodule IEx.HelpersTest do
     cleanup_modules([:sample])
   end
 
-  test "pid helper" do
+  test "pid/1 helper" do
+    assert "#PID<0.32767.3276>" == capture_iex(~s[pid("0.32767.3276")])
+    assert "#PID<0.5.6>" == capture_iex(~s[pid("0.5.6")])
+    assert "** (ArgumentError) argument error" <> _ =
+      capture_iex(~s[pid("0.6.-6")])
+  end
+
+  test "pid/3 helper" do
     assert "#PID<0.32767.3276>" == capture_iex("pid(0,32767,3276)")
     assert "#PID<0.5.6>" == capture_iex("pid(0,5,6)")
     assert "** (FunctionClauseError) no function clause matching in IEx.Helpers.pid/3" <> _ =
